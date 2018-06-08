@@ -16,17 +16,23 @@ static int connection_new(lua_State *L) {
     const char *db = NULL;
     int port = 0;
 
-    const char *unix_socket = NULL; /* TODO always NULL */
+    const char *unix_socket = NULL;
     int client_flag = 0; /* TODO always 0, set flags from options table */
 
     /* db, user, password, host, port */
     switch (n) {
     case 5:
 	if (lua_isnil(L, 5) == 0) 
-	    port = luaL_checkint(L, 5);
+	    port = luaL_checkinteger(L, 5);
     case 4: 
 	if (lua_isnil(L, 4) == 0) 
 	    host = luaL_checkstring(L, 4);
+	if (host != NULL) {
+		if (host[0] == '/') {
+			unix_socket = host;
+			host = NULL;
+		};
+	};
     case 3:
 	if (lua_isnil(L, 3) == 0) 
 	    password = luaL_checkstring(L, 3);
@@ -178,6 +184,16 @@ static int connection_rollback(lua_State *L) {
 }
 
 /*
+ * last_id = statement:last_id()
+ */
+static int connection_lastid(lua_State *L) {
+	connection_t *conn = (connection_t *)luaL_checkudata(L, 1, DBD_MYSQL_CONNECTION);
+
+	lua_pushinteger(L, mysql_insert_id( conn->mysql ));
+	return 1;
+}
+
+/*
  * __gc
  */
 static int connection_gc(lua_State *L) {
@@ -207,6 +223,7 @@ int dbd_mysql_connection(lua_State *L) {
 	{"prepare", connection_prepare},
 	{"quote", connection_quote},
 	{"rollback", connection_rollback},
+	{"last_id", connection_lastid},
 	{NULL, NULL}
     };
 
@@ -215,18 +232,9 @@ int dbd_mysql_connection(lua_State *L) {
 	{NULL, NULL}
     };
 
-    luaL_newmetatable(L, DBD_MYSQL_CONNECTION);
-    luaL_register(L, 0, connection_methods);
-    lua_pushvalue(L,-1);
-    lua_setfield(L, -2, "__index");
-
-    lua_pushcfunction(L, connection_gc);
-    lua_setfield(L, -2, "__gc");
-
-    lua_pushcfunction(L, connection_tostring);
-    lua_setfield(L, -2, "__tostring");
-
-    luaL_register(L, DBD_MYSQL_CONNECTION, connection_class_methods);
+    dbd_register(L, DBD_MYSQL_CONNECTION,
+		 connection_methods, connection_class_methods,
+		 connection_gc, connection_tostring);
 
     return 1;    
 }
